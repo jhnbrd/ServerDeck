@@ -18,3 +18,9 @@ __pycache__/
 .venv/
 venv/
 .env
+
+# Build / release artifacts
+build/
+dist/
+installer/output/
+*.spec.log

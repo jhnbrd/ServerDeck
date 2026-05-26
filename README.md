@@ -58,6 +58,17 @@ python main.py
 
 On first launch, ServerDeck creates an empty `serverdeck.db` in the project root. No sample projects are bundled—you add your own through the UI, or optionally use a local seeder (see below).
 
+### Install from release (recommended for end users)
+
+Download `ServerDeck-Setup-x.x.x.exe` from [GitHub Releases](https://github.com/jhnbrd/ServerDeck/releases), run the installer, and launch **ServerDeck** from the Start menu.
+
+The installer can optionally:
+
+- Create a **desktop shortcut**
+- Add **Start ServerDeck when Windows starts** (shortcut in your Startup folder)
+
+Installed apps store settings in `%APPDATA%\ServerDeck\serverdeck.db` (not in `Program Files`).
+
 ### Optional: local project seeder
 
 For a personal dev setup, copy the example seeder and customize it with your machine paths:
@@ -197,8 +208,47 @@ ServerDeck/
 ├── core/                # Process manager, port checker, network, database
 ├── ui/                  # CustomTkinter dashboard and modals
 ├── requirements.txt
-└── serverdeck.db        # Created at runtime (not committed)
+└── serverdeck.db        # Created at runtime (not committed; dev mode only)
 ```
+
+## Building a release
+
+Maintainers can produce a standalone executable and Windows installer from the repo.
+
+### Prerequisites
+
+- Windows 10+
+- Python 3.10+
+- [Inno Setup 6](https://jrsoftware.org/isdl.php) (optional, for the `.exe` installer)
+
+### Build steps
+
+```powershell
+cd ServerDeck
+.\scripts\build_release.ps1
+```
+
+This will:
+
+1. Create/use a local `venv`
+2. Install runtime + build dependencies
+3. Build `dist\ServerDeck\ServerDeck.exe` with PyInstaller
+4. Build `installer\output\ServerDeck-Setup-1.0.0.exe` if Inno Setup is installed
+
+To build only the portable executable (no installer):
+
+```powershell
+.\scripts\build_release.ps1 -SkipInstaller
+```
+
+### Version bumps
+
+Update the version in both places before cutting a release:
+
+- `core/paths.py` → `APP_VERSION`
+- `installer/ServerDeck.iss` → `#define AppVersion`
+
+Then rebuild and attach `installer\output\ServerDeck-Setup-x.x.x.exe` to a GitHub Release.
 
 ## Contributing
 

@@ -11,6 +11,8 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Callable, TypeVar
 
+from core.paths import default_db_path
+
 DEFAULT_PROJECT: dict[str, Any] = {
     "id": "",
     "name": "Untitled Application",
@@ -48,8 +50,7 @@ class DataStore:
     """Thread-safe read/write access to the ServerDeck SQLite database."""
 
     def __init__(self, db_path: str | None = None) -> None:
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.db_path = db_path or os.path.join(base_dir, "serverdeck.db")
+        self.db_path = db_path or default_db_path()
         self._lock = threading.Lock()
         self._init_db()
 

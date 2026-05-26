@@ -1,9 +1,11 @@
 """Shared color tokens and geometry constants for ServerDeck."""
 
+from core.paths import APP_NAME, APP_VERSION
+
 # Window geometry (XAMPP footprint)
 WINDOW_WIDTH = 680
 WINDOW_HEIGHT = 520
-WINDOW_TITLE = "ServerDeck v1.0.0 — Home Server Control Panel"
+WINDOW_TITLE = f"{APP_NAME} v{APP_VERSION} — Home Server Control Panel"
 
 LOG_PANEL_HEIGHT = 160
 
