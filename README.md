@@ -4,19 +4,46 @@ A lightweight, open-source control panel for managing local development servers 
 
 ## Features
 
-- **Compact dashboard** — Fixed 680×450 utility window with a clean dark UI
+- **Compact dashboard** — Fixed utility window with a clean dark UI
 - **Per-project control** — Start, stop, view console output, open directory, launch VS Code
 - **Port conflict detection** — Pre-flight socket checks before launching services
 - **Process tree teardown** — Safely terminates child processes (npm, Vite, etc.) on stop
 - **Network configuration** — Set static IP, subnet, gateway, and adapter via `netsh`
+- **Buffered console logs** — Output is captured from the moment a project starts, even before you open its console
 - **SQLite storage** — Projects stored locally in `serverdeck.db` (auto-created, gitignored)
 - **Non-destructive archive** — Retire projects without deleting their configuration
 
-## Requirements
+## Minimum requirements
 
-- Windows 10 or later
-- Python 3.10+
-- Administrator privileges (only needed for network configuration changes)
+### ServerDeck itself
+
+| Requirement | Minimum |
+|---|---|
+| **OS** | Windows 10 or later (64-bit) |
+| **Python** | 3.10 or later |
+| **RAM** | 512 MB free (1 GB+ recommended if running many services) |
+| **Disk** | ~50 MB for ServerDeck + dependencies |
+| **Display** | 680×520 minimum window size |
+| **Admin rights** | Required only when applying network settings (`netsh`) |
+
+### Python dependencies
+
+Installed automatically via `pip install -r requirements.txt`:
+
+- `customtkinter` 5.2+
+- `psutil` 5.9+
+- `Pillow` 10.2+
+
+### Your projects (not bundled)
+
+ServerDeck does **not** ship Node, .NET, PHP, Python venvs, or your app code. Each application you register must already be installed and runnable on that machine. Examples:
+
+| Stack | You need on the PC |
+|---|---|
+| Python / FastAPI | Python venv, dependencies, valid `uvicorn` command |
+| Node / React / Vite | Node.js, `npm install` done in project folder |
+| .NET | .NET SDK matching the project |
+| PHP / Laravel | PHP, Composer, project dependencies |
 
 ## Installation
 
@@ -46,6 +73,96 @@ python seed_local.py
 python seed_local.py --force
 ```
 
+## How to use
+
+### 1. Launch ServerDeck
+
+```powershell
+cd ServerDeck
+venv\Scripts\activate
+python main.py
+```
+
+On startup, ServerDeck will automatically:
+
+1. **Apply network settings** from the Network panel (adapter, IP, subnet, gateway)
+2. **Start all configured applications** that are not already running
+
+These run in the background; progress appears in **System Status Logs** at the bottom of the window.
+
+> **Note:** Applying network settings requires administrator privileges. Run ServerDeck as admin if you use static IP configuration, or ignore network warnings if you only need process management.
+
+### 2. Network panel (top)
+
+| Field | Purpose |
+|---|---|
+| **IP / Subnet / Gateway** | Static network values to apply |
+| **Adapter** | Which network interface to configure |
+| **✓ Apply Network** | Manually push settings via `netsh` |
+
+On launch, the panel is pre-filled from your current adapter. Values are applied automatically; use **Apply Network** only if you changed something manually.
+
+### 3. Toolbar
+
+| Button | What it does |
+|---|---|
+| **▶ Start All** | Starts every configured application that is not running |
+| **■ Stop All** | Stops all tracked apps and frees their ports (including orphaned processes from a previous session) |
+| **+ Add New Application** | Opens the project wizard |
+| **Running counter** | Shows `running / total` apps |
+
+### 4. Application rows
+
+Each row shows the app name, port, status badge, and actions:
+
+| Control | What it does |
+|---|---|
+| **Start / Stop** | Toggle that single application |
+| **>_ Console** | Open a live log window (includes output from before you opened it) |
+| **••• menu** | Open directory, open in VS Code, edit settings, or archive |
+
+**Status badges:**
+
+| Badge | Meaning |
+|---|---|
+| **● Ready** | Port is free; safe to start |
+| **● Active** | ServerDeck is running this app |
+| **● Conflict** | Port is already in use by something else — click **Fix** to edit the port, or use **Stop All** |
+
+### 5. System Status Logs
+
+The log panel at the bottom shows ServerDeck events: starts, stops, port audits, and network results. Scroll to review history; use **Clear** to wipe the display.
+
+### 6. Closing ServerDeck
+
+When you close the window with **X**, ServerDeck stops **all configured applications** before exiting. Always use the window close button rather than killing Python from Task Manager, or orphaned processes may keep holding ports.
+
+If ports still show **Conflict** after a crash or force-kill, click **Stop All** on the next launch.
+
+### 7. Run at Windows login (optional)
+
+Create a local startup script (not committed to git). Example `start_serverdeck.bat`:
+
+```bat
+@echo off
+if /I not "%~1"=="hidden" (
+    mshta "javascript:var sh=new ActiveXObject('WScript.Shell'); sh.Run('\"\"\"%~f0\"\"\" hidden', 0); close()"
+    exit /b
+)
+
+cd /d D:\Projects\ServerDeck
+pythonw main.py
+```
+
+1. Update `cd /d` to your ServerDeck folder
+2. Use the full path to `pythonw.exe` if Python is not on PATH at login:
+   ```bat
+   "C:\Path\To\Python\pythonw.exe" main.py
+   ```
+3. Copy the `.bat` into the Startup folder: press **Win + R**, type `shell:startup`, press Enter
+
+The hidden launcher avoids a flashing CMD window. ServerDeck will auto-apply network settings and start all apps when you log in.
+
 ## Adding your first application
 
 1. Launch ServerDeck
@@ -65,6 +182,12 @@ python seed_local.py --force
 | Node / npm | `set PORT=3000 && npm run dev` |
 | .NET | `dotnet run --urls=http://0.0.0.0:5000` |
 | PHP / Laravel | `php artisan serve --host=0.0.0.0 --port=8080` |
+
+**Tips:**
+
+- Use `0.0.0.0` as the host so the service is reachable on your LAN, not just `localhost`
+- Match the port in your launch command to the **Port** field in ServerDeck
+- Use `&&` to chain steps (activate venv, set env vars, then run)
 
 ## Project structure
 

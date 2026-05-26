@@ -8,6 +8,7 @@ serverdeck.db-*
 
 # Personal local seeder (machine-specific project paths)
 seed_local.py
+start_serverdeck.bat
 
 # Python
 __pycache__/
