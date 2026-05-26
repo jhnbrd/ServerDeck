@@ -104,10 +104,14 @@ class NetworkPanel(ctk.CTkFrame):
         if gateway:
             self.gateway_var.set(gateway)
 
-    def _apply(self) -> None:
-        self.on_apply(
+    def get_values(self) -> tuple[str, str, str, str]:
+        return (
             self.adapter_var.get(),
             self.ip_var.get().strip(),
             self.subnet_var.get().strip(),
             self.gateway_var.get().strip(),
         )
+
+    def _apply(self) -> None:
+        adapter, ip, subnet, gateway = self.get_values()
+        self.on_apply(adapter, ip, subnet, gateway)

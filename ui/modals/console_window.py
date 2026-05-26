@@ -25,7 +25,13 @@ from ui.theme import (
 class ConsoleWindow(ctk.CTkToplevel):
     """Streams stdout/stderr lines without blocking the main UI thread."""
 
-    def __init__(self, master, project_name: str, project_id: str) -> None:
+    def __init__(
+        self,
+        master,
+        project_name: str,
+        project_id: str,
+        initial_lines: list[str] | None = None,
+    ) -> None:
         super().__init__(master)
         self.project_id = project_id
         self.title(f"Console — {project_name}")
@@ -98,6 +104,8 @@ class ConsoleWindow(ctk.CTkToplevel):
         )
         self.textbox.pack(fill="both", expand=True, padx=12, pady=(0, 12))
         self.textbox.configure(state="disabled")
+        if initial_lines:
+            self._append_lines(initial_lines)
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(120, self._poll_queue)
@@ -110,6 +118,15 @@ class ConsoleWindow(ctk.CTkToplevel):
         self.textbox.configure(state="normal")
         self.textbox.delete("1.0", "end")
         self.textbox.configure(state="disabled")
+
+    def _append_lines(self, lines: list[str]) -> None:
+        if not lines:
+            return
+        self.textbox.configure(state="normal")
+        self.textbox.insert("end", "\n".join(lines) + "\n")
+        self.textbox.configure(state="disabled")
+        if self._auto_scroll:
+            self.textbox.see("end")
 
     def _toggle_autoscroll(self) -> None:
         self._auto_scroll = not self._auto_scroll
@@ -144,10 +161,8 @@ class ConsoleWindow(ctk.CTkToplevel):
                 line = self._queue.get_nowait()
             except queue.Empty:
                 break
-            self.textbox.configure(state="normal")
-            self.textbox.insert("end", line + "\n")
+            self._append_lines([line])
             updated = True
-            self.textbox.configure(state="disabled")
         if updated and self._auto_scroll:
             self.textbox.see("end")
         self.after(120, self._poll_queue)

@@ -43,6 +43,8 @@ class MainWindow(ctk.CTk):
         self.maxsize(WINDOW_WIDTH, WINDOW_HEIGHT)
         self.resizable(False, False)
         self.configure(fg_color=BG_PRIMARY)
+        self._closing = False
+        self.protocol("WM_DELETE_WINDOW", self._on_window_close)
 
         self.data_store = DataStore()
         self.console_windows: dict[str, ConsoleWindow] = {}
@@ -75,7 +77,7 @@ class MainWindow(ctk.CTk):
         self.list_frame = ctk.CTkScrollableFrame(
             root,
             fg_color=BG_PRIMARY,
-            height=168,
+            height=150,
             scrollbar_button_color="#3A424A",
             scrollbar_button_hover_color="#0066CC",
         )
@@ -92,6 +94,7 @@ class MainWindow(ctk.CTk):
             messagebox.showerror("Database Error", str(exc), parent=self)
         self._log("ServerDeck management engine loaded successfully.", "success")
         self._audit_ports()
+        self.after(0, self._auto_startup_async)
         self.after(1000, self._heartbeat)
 
     def _show_empty_state(self) -> None:
@@ -216,17 +219,37 @@ class MainWindow(ctk.CTk):
         if window and window.winfo_exists():
             window.push_line(line)
 
-    def _apply_network(self, adapter: str, ip: str, subnet: str, gateway: str) -> None:
+    def _apply_network(self, adapter: str, ip: str, subnet: str, gateway: str, *, silent: bool = False) -> None:
         def task() -> None:
             ok, message = apply_static_ip(adapter, ip, subnet, gateway)
             level = "success" if ok else "warning"
             self._log(message, level)
+            if silent:
+                return
             if not ok:
                 self.after(0, lambda: messagebox.showwarning("Network Configuration", message, parent=self))
             else:
                 self.after(0, lambda: messagebox.showinfo("Network Configuration", message, parent=self))
 
         threading.Thread(target=task, daemon=True, name="apply-network").start()
+
+    def _auto_startup_async(self) -> None:
+        adapter, ip, subnet, gateway = self.network_panel.get_values()
+        threading.Thread(
+            target=self._auto_startup,
+            args=(adapter, ip, subnet, gateway),
+            daemon=True,
+            name="auto-startup",
+        ).start()
+
+    def _auto_startup(self, adapter: str, ip: str, subnet: str, gateway: str) -> None:
+        self._log("Auto-applying network settings...", "info")
+        ok, message = apply_static_ip(adapter, ip, subnet, gateway)
+        self._log(message, "success" if ok else "warning")
+        if not ok:
+            self._log("Continuing with Start All despite network configuration failure.", "warning")
+        self._log("Auto-starting all configured applications...", "info")
+        self._start_all()
 
     def _start_project_async(self, project_id: str) -> None:
         threading.Thread(
@@ -295,10 +318,23 @@ class MainWindow(ctk.CTk):
         threading.Thread(target=self._stop_all, daemon=True, name="stop-all").start()
 
     def _stop_all(self) -> None:
-        messages = self.process_manager.stop_all()
+        projects = self.data_store.get_active_projects()
+        messages = self.process_manager.stop_all_projects(projects)
         for message in messages:
             self._log(message, "success")
         self.after(0, self._refresh_inventory)
+
+    def _on_window_close(self) -> None:
+        if self._closing:
+            return
+        self._closing = True
+
+        def task() -> None:
+            projects = self.data_store.get_active_projects()
+            self.process_manager.stop_all_projects(projects)
+            self.after(0, self.destroy)
+
+        threading.Thread(target=task, daemon=True, name="shutdown").start()
 
     def _update_counts(self) -> None:
         projects = self.data_store.get_active_projects()
@@ -314,7 +350,13 @@ class MainWindow(ctk.CTk):
         project = self.data_store.find_project(project_id)
         if not project:
             return
-        window = ConsoleWindow(self, project.get("name", "Application"), project_id)
+        history = self.process_manager.get_log_history(project_id)
+        window = ConsoleWindow(
+            self,
+            project.get("name", "Application"),
+            project_id,
+            initial_lines=history,
+        )
         self.console_windows[project_id] = window
 
     def _open_add_wizard(self) -> None:

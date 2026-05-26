@@ -13,6 +13,7 @@ from ui.theme import (
     FONT_FAMILY,
     FONT_MONO,
     LOG_INFO,
+    LOG_PANEL_HEIGHT,
     LOG_SUCCESS,
     LOG_WARNING,
     TEXT_PRIMARY,
@@ -51,7 +52,7 @@ class LogPanel(ctk.CTkFrame):
 
         self.textbox = ctk.CTkTextbox(
             self,
-            height=96,
+            height=LOG_PANEL_HEIGHT,
             fg_color=BG_LOG,
             border_color=BORDER,
             border_width=1,

@@ -2,8 +2,10 @@
 
 # Window geometry (XAMPP footprint)
 WINDOW_WIDTH = 680
-WINDOW_HEIGHT = 450
+WINDOW_HEIGHT = 520
 WINDOW_TITLE = "ServerDeck v1.0.0 — Home Server Control Panel"
+
+LOG_PANEL_HEIGHT = 160
 
 # Palette
 BG_PRIMARY = "#1A1D20"

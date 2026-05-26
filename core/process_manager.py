@@ -35,6 +35,7 @@ class ProcessManager:
 
     def __init__(self, on_log: LogCallback | None = None) -> None:
         self._processes: dict[str, ManagedProcess] = {}
+        self._log_buffers: dict[str, list[str]] = {}
         self._lock = threading.Lock()
         self._on_log = on_log or (lambda _project_id, _line: None)
         self._reader_threads: dict[str, threading.Thread] = {}
@@ -56,6 +57,10 @@ class ProcessManager:
         if running:
             return "active"
         return evaluate_port_state(port, False)
+
+    def get_log_history(self, project_id: str) -> list[str]:
+        with self._lock:
+            return list(self._log_buffers.get(project_id, []))
 
     def start(
         self,
@@ -96,6 +101,7 @@ class ProcessManager:
         managed = ManagedProcess(project_id=project_id, pid=popen.pid, popen=popen)
         with self._lock:
             self._processes[project_id] = managed
+            self._log_buffers[project_id] = []
 
         reader = threading.Thread(
             target=self._stream_output,
@@ -128,6 +134,18 @@ class ProcessManager:
 
         return True, f"{name} stopped."
 
+    def stop_on_port(self, port: int, name: str = "Application") -> tuple[bool, str]:
+        """Stop an untracked process that is listening on the given port."""
+        if not is_port_in_use(port):
+            return False, f"{name} is not running on port {port}."
+
+        pid = self._find_listener_pid(port)
+        if not pid:
+            return False, f"Port {port} is in use but the owning process could not be identified."
+
+        self._terminate_tree(pid)
+        return True, f"{name} stopped (freed port {port})."
+
     def stop_all(self) -> list[str]:
         messages: list[str] = []
         with self._lock:
@@ -138,6 +156,30 @@ class ProcessManager:
                 messages.append(message)
             if not ok and message:
                 continue
+        return messages
+
+    def stop_all_projects(self, projects: list[dict]) -> list[str]:
+        """Stop tracked apps, then free configured ports held by orphaned processes."""
+        messages = self.stop_all()
+        freed_ports: set[int] = set()
+
+        for project in projects:
+            project_id = project.get("id", "")
+            name = project.get("name", "Application")
+            port = int(project.get("port", 0))
+            if port <= 0 or port in freed_ports:
+                continue
+            if self.is_running(project_id):
+                continue
+            if not is_port_in_use(port):
+                continue
+
+            ok, message = self.stop_on_port(port, name)
+            if message:
+                messages.append(message)
+            if ok:
+                freed_ports.add(port)
+
         return messages
 
     def refresh_external_exits(self) -> list[str]:
@@ -157,8 +199,13 @@ class ProcessManager:
         for line in iter(popen.stdout.readline, ""):
             if not line:
                 break
-            self._on_log(project_id, line.rstrip("\n"))
+            self._record_log(project_id, line.rstrip("\n"))
         popen.stdout.close()
+
+    def _record_log(self, project_id: str, line: str) -> None:
+        with self._lock:
+            self._log_buffers.setdefault(project_id, []).append(line)
+        self._on_log(project_id, line)
 
     @staticmethod
     def _alive(pid: int) -> bool:
@@ -218,3 +265,15 @@ class ProcessManager:
                 pass
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
+
+    @staticmethod
+    def _find_listener_pid(port: int) -> int | None:
+        if psutil is None or port <= 0:
+            return None
+        for conn in psutil.net_connections(kind="inet"):
+            if conn.status != psutil.CONN_LISTEN:
+                continue
+            laddr = conn.laddr
+            if laddr and laddr.port == port and conn.pid:
+                return conn.pid
+        return None
