@@ -9,7 +9,7 @@ from tkinter import messagebox
 
 import customtkinter as ctk
 
-from core.data_store import DataStore
+from core.data_store import DataStore, DataStoreError
 from core.network_manager import apply_static_ip, list_adapters
 from core.port_checker import evaluate_port_state, is_port_in_use
 from core.process_manager import ProcessManager
@@ -20,9 +20,11 @@ from ui.components.toolbar import Toolbar
 from ui.modals.console_window import ConsoleWindow
 from ui.modals.project_wizard import ProjectWizard
 from ui.theme import (
+    BG_CARD,
     BG_PRIMARY,
     FONT_FAMILY,
     TEXT_MUTED,
+    TEXT_SECONDARY,
     WINDOW_HEIGHT,
     WINDOW_TITLE,
     WINDOW_WIDTH,
@@ -83,18 +85,47 @@ class MainWindow(ctk.CTk):
         self.log_panel.pack(fill="x")
 
         self._init_network()
-        self._refresh_inventory()
+        try:
+            self._refresh_inventory()
+        except DataStoreError as exc:
+            self._log(str(exc), "warning")
+            messagebox.showerror("Database Error", str(exc), parent=self)
         self._log("ServerDeck management engine loaded successfully.", "success")
         self._audit_ports()
         self.after(1000, self._heartbeat)
 
+    def _show_empty_state(self) -> None:
+        empty = ctk.CTkFrame(self.list_frame, fg_color=BG_CARD, corner_radius=8)
+        empty.pack(fill="x", pady=3)
+        ctk.CTkLabel(
+            empty,
+            text="No applications configured yet.",
+            font=(FONT_FAMILY, 11, "bold"),
+            text_color=TEXT_SECONDARY,
+        ).pack(pady=(14, 4))
+        ctk.CTkLabel(
+            empty,
+            text="Click  + Add New Application  to register your first local service.",
+            font=(FONT_FAMILY, 10),
+            text_color=TEXT_MUTED,
+        ).pack(pady=(0, 14))
+
     def _init_network(self) -> None:
-        adapters = list_adapters()
+        try:
+            adapters = list_adapters()
+        except Exception as exc:
+            self._log(f"Network adapter discovery failed: {exc}", "warning")
+            adapters = []
         names = [adapter.name for adapter in adapters]
         primary = adapters[0] if adapters else None
         self.network_panel.set_adapters(names, primary.name if primary else None)
         if primary:
             self.network_panel.set_values(primary.ip, primary.subnet, primary.gateway)
+
+    def _handle_db_error(self, action: str, exc: DataStoreError) -> None:
+        message = f"{action}: {exc}"
+        self._log(message, "warning")
+        messagebox.showerror("Database Error", message, parent=self)
 
     def _refresh_inventory(self) -> None:
         for child in self.list_frame.winfo_children():
@@ -102,6 +133,11 @@ class MainWindow(ctk.CTk):
         self.app_rows.clear()
 
         projects = self.data_store.get_active_projects()
+        if not projects:
+            self._show_empty_state()
+            self.toolbar.update_counts(0, 0)
+            return
+
         for index, project in enumerate(projects):
             pid = project.get("id", "")
             status = self._resolve_status(project)
@@ -130,6 +166,9 @@ class MainWindow(ctk.CTk):
 
     def _audit_ports(self) -> None:
         projects = self.data_store.get_active_projects()
+        if not projects:
+            self._log("No applications configured. Add a project to begin.", "info")
+            return
         clear = 0
         conflicts = 0
         for project in projects:
@@ -282,7 +321,11 @@ class MainWindow(ctk.CTk):
         ProjectWizard(self, on_save=self._save_new_project)
 
     def _save_new_project(self, payload: dict) -> None:
-        created = self.data_store.add_project(payload)
+        try:
+            created = self.data_store.add_project(payload)
+        except DataStoreError as exc:
+            self._handle_db_error("Could not add application", exc)
+            return
         self._refresh_inventory()
         self._log(f"Added application '{created.get('name')}'.", "success")
 
@@ -323,12 +366,21 @@ class MainWindow(ctk.CTk):
                     parent=self,
                 )
                 return
-            if self.data_store.archive_project(project_id):
+            try:
+                archived = self.data_store.archive_project(project_id)
+            except DataStoreError as exc:
+                self._handle_db_error("Could not archive application", exc)
+                return
+            if archived:
                 self._refresh_inventory()
                 self._log(f"Archived '{project.get('name')}'.", "success")
 
     def _save_edit_project(self, project_id: str, payload: dict) -> None:
-        updated = self.data_store.update_project(project_id, payload)
+        try:
+            updated = self.data_store.update_project(project_id, payload)
+        except DataStoreError as exc:
+            self._handle_db_error("Could not update application", exc)
+            return
         if updated:
             self._refresh_inventory()
             self._audit_ports()

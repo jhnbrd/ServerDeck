@@ -1,0 +1,19 @@
+# Local specs and design assets (not shipped with the app)
+markdowns/
+ui-prot/
+
+# Runtime database (auto-created on first launch)
+serverdeck.db
+serverdeck.db-*
+
+# Personal local seeder (machine-specific project paths)
+seed_local.py
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.venv/
+venv/
+.env
